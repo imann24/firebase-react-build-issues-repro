@@ -1,25 +1,30 @@
-# Resolve react_native_pods.rb with node to allow for hoisting
+# Resolve react_native_pods.rb using Node to support hoisting
 require Pod::Executable.execute_command('node', ['-p',
   'require.resolve(
     "react-native/scripts/react_native_pods.rb",
-    {paths: [process.argv[1]]},
+    { paths: [process.argv[1]] }
   )', __dir__]).strip
 
 platform :ios, min_ios_version_supported
+
+# Prepare the React Native project environment
 prepare_react_native_project!
 
+# Linkage configuration
 linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
+if linkage
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
   use_frameworks! :linkage => linkage.to_sym
 end
 
 target 'ReproducerApp' do
+  # Configure native modules and frameworks linkage
   config = use_native_modules!
+  use_frameworks! :linkage => :static
 
   use_react_native!(
     :path => config[:reactNativePath],
-    # An absolute path to your application root.
+    # An absolute path to your application root
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
@@ -29,12 +34,17 @@ target 'ReproducerApp' do
   end
 
   post_install do |installer|
-    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
+    # Workaround for a common compiler issue with simulator architectures
+    installer.pods_project.build_configurations.each do |config|
+      config.build_settings["EXCLUDED_ARCHS[sdk=iphonesimulator*]"] = "arm64"
+    end
+
+    # Call react_native_post_install script to finalize Pod install
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      # :ccache_enabled => true
+      # :ccache_enabled => true # Enable if needed
     )
   end
 end
